@@ -1,35 +1,78 @@
-import { Application, Assets, Sprite } from "pixi.js";
+import { Application } from "pixi.js";
+import { ElevatorSystem } from "./app";
+
+// Configuration
+let ELEVATOR_CONFIG = {
+  floors: 10, // Number of floors (can be changed)
+  capacity: 4, // Maximum people capacity (can be changed)
+  floorHeight: 60,
+  elevatorWidth: 80,
+  elevatorHeight: 50,
+  animationSpeed: 2,
+};
+
+let app: Application;
+let elevatorSystem: ElevatorSystem | null = null;
+let floorsInput: HTMLInputElement | null = null;
+let capacityInput: HTMLInputElement | null = null;
+
+async function initializeElevator() {
+  // Get input values
+  floorsInput = document.getElementById("floors-input") as HTMLInputElement;
+  capacityInput = document.getElementById("capacity-input") as HTMLInputElement;
+
+  if (floorsInput && capacityInput) {
+    ELEVATOR_CONFIG.floors = parseInt(floorsInput.value) || 10;
+    ELEVATOR_CONFIG.capacity = parseInt(capacityInput.value) || 4;
+  }
+
+  // Clear previous instance if exists
+  if (elevatorSystem && app) {
+    app.stage.removeChildren();
+  }
+
+  // Create or reinitialize the application
+  if (!app) {
+    app = new Application();
+    await app.init({ background: "#1a1a1a", width: 600, height: 700 });
+    document.getElementById("pixi-container")!.appendChild(app.canvas);
+  }
+
+  // Calculate dynamic height based on floors
+  const canvasHeight = Math.max(700, ELEVATOR_CONFIG.floors * ELEVATOR_CONFIG.floorHeight + 100);
+  app.renderer.resize(600, canvasHeight);
+
+  // Create a new elevator system with updated config
+  elevatorSystem = new ElevatorSystem(app, ELEVATOR_CONFIG);
+}
 
 (async () => {
-  // Create a new application
-  const app = new Application();
+  const floors = document.getElementById("floors-input") as HTMLInputElement;
+  const capacity = document.getElementById("capacity-input") as HTMLInputElement;
 
-  // Initialize the application
-  await app.init({ background: "#1099bb", resizeTo: window });
+  floors.value = ELEVATOR_CONFIG.floors.toString();
+  capacity.value = ELEVATOR_CONFIG.capacity.toString();
 
-  // Append the application canvas to the document body
-  document.getElementById("pixi-container")!.appendChild(app.canvas);
+  // Initialize with default values
+  await initializeElevator();
 
-  // Load the bunny texture
-  const texture = await Assets.load("/assets/bunny.png");
+  // Add an event listener to the apply button
+  const applyButton = document.getElementById("apply-config");
+  if (applyButton) {
+    applyButton.addEventListener("click", async () => {
+      await initializeElevator();
+    });
+  }
 
-  // Create a bunny Sprite
-  const bunny = new Sprite(texture);
+  // Allow pressing Enter in input fields to apply
+  const floorsInput = document.getElementById("floors-input");
+  const capacityInput = document.getElementById("capacity-input");
 
-  // Center the sprite's anchor point
-  bunny.anchor.set(0.5);
-
-  // Move the sprite to the center of the screen
-  bunny.position.set(app.screen.width / 2, app.screen.height / 2);
-
-  // Add the bunny to the stage
-  app.stage.addChild(bunny);
-
-  // Listen for animate update
-  app.ticker.add((time) => {
-    // Just for fun, let's rotate mr rabbit a little.
-    // * Delta is 1 if running at 100% performance *
-    // * Creates frame-independent transformation *
-    bunny.rotation += 0.1 * time.deltaTime;
+  [floorsInput, capacityInput].forEach(input => {
+    input?.addEventListener("keypress", async (e) => {
+      if (e.key === "Enter") {
+        await initializeElevator();
+      }
+    });
   });
 })();

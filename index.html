@@ -5,10 +5,23 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/style.css">
-    <title>PixiJS - Template</title>
+    <title>PixiJS - Elevator Simulation</title>
 </head>
 
 <body>
+    <div id="controls-panel">
+        <h3>Elevator Config</h3>
+        <div class="control-group">
+            <label for="floors-input">Number of Floors:</label>
+            <input type="number" id="floors-input" min="3" max="10" />
+        </div>
+        <div class="control-group">
+            <label for="capacity-input">Elevator Capacity:</label>
+            <input type="number" id="capacity-input" min="2" max="4" />
+        </div>
+        <button id="apply-config">Apply Configuration</button>
+    </div>
+
     <div id="app">
         <div id="pixi-container"></div>
     </div>

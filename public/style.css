@@ -3,6 +3,68 @@ body {
     padding: 0;
     color: rgba(255, 255, 255, 0.87);
     background-color: #000000;
+    font-family: Arial, sans-serif;
+}
+
+#controls-panel {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: rgba(30, 30, 30, 0.9);
+    padding: 20px;
+    border-radius: 8px;
+    border: 2px solid #4CAF50;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+}
+
+.control-group {
+    margin-bottom: 15px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: #4CAF50;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.control-group input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #555;
+    border-radius: 4px;
+    background: #2a2a2a;
+    color: white;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.control-group input:focus {
+    outline: none;
+    border-color: #4CAF50;
+}
+
+#apply-config {
+    width: 100%;
+    padding: 10px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+#apply-config:hover {
+    background: #45a049;
+}
+
+#apply-config:active {
+    background: #3d8b40;
 }
 
 #app {
