@@ -43,7 +43,7 @@ export class ElevatorSystem {
     this.drawElevator();
     this.drawControls();
     // Delay adding people until next frame
-    setTimeout(() => this.addPeople(15), 100); // Add some random people
+    setTimeout(() => this.addPeople(6), 100); // Add some random people
     this.app.ticker.add(() => this.update());
   }
 
@@ -217,9 +217,9 @@ export class ElevatorSystem {
         })()
       };
 
-      this.drawPerson(person);
       this.people.push(person);
       this.container.addChild(person.sprite);
+      this.drawPerson(person);
     }
   }
 
@@ -238,7 +238,7 @@ export class ElevatorSystem {
       const waitingOnFloor = this.people.filter(p => p.currentFloor === person.currentFloor && !p.inElevator);
       const index = waitingOnFloor.indexOf(person);
 
-      person.sprite.circle(115 + (index % 6) * 12, y + this.config.floorHeight - 10, 5);
+      person.sprite.circle(100 + (index % 5) * 18, y + this.config.floorHeight - 10, 5);
       person.sprite.fill(person.direction === 1 ? 0x4CAF50 : 0xFF9800);
     }
 
