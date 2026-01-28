@@ -1,5 +1,6 @@
 import { Application, Graphics, Text, Container } from "pixi.js";
 
+import { Person } from "./models/Person";
 import { Config  } from "./models/Config";
 
 export class ElevatorSystem {
@@ -11,6 +12,10 @@ export class ElevatorSystem {
   private currentFloor: number = 0;
   private targetFloor: number = 0;
   private isMoving: boolean = false;
+  private people: Person[] = [];
+  private peopleInElevator: Person[] = [];
+  private floorButtons: Graphics[] = [];
+  private floorTexts: Text[] = [];
   private peopleCountText: Text;
 
   constructor(app: Application, ELEVATOR_CONFIG: Config) {
@@ -37,6 +42,8 @@ export class ElevatorSystem {
     this.drawBuilding();
     this.drawElevator();
     this.drawControls();
+    // Delay adding people until next frame
+    setTimeout(() => this.addPeople(15), 100); // Add some random people
     this.app.ticker.add(() => this.update());
   }
 
@@ -62,6 +69,7 @@ export class ElevatorSystem {
       floorText.x = -100;
       floorText.y = y + this.config.floorHeight - 40;
       this.container.addChild(floorText);
+      this.floorTexts.push(floorText);
 
       // Call button
       const button = new Graphics();
@@ -78,6 +86,7 @@ export class ElevatorSystem {
 
       this.container.addChild(button);
       this.container.addChild(buttonText);
+      this.floorButtons.push(button);
     }
 
     // Elevator shaft
@@ -137,13 +146,32 @@ export class ElevatorSystem {
       this.container.addChild(btnText);
     }
 
+    // Add people button
+    const addPeopleBtn = new Graphics();
+    addPeopleBtn.rect(controlsX, controlsY + 90, 120, 30);
+    addPeopleBtn.fill(0xFF9800);
+    addPeopleBtn.eventMode = 'static';
+    addPeopleBtn.cursor = 'pointer';
+
+    const addPeopleText = new Text({
+      text: "Add 5 People",
+      style: { fontSize: 12, fill: 0xffffff }
+    });
+    addPeopleText.x = controlsX + 15;
+    addPeopleText.y = controlsY + 98;
+
+    addPeopleBtn.on('pointerdown', () => this.addPeople(5));
+
+    this.container.addChild(addPeopleBtn);
+    this.container.addChild(addPeopleText);
+
     // Info text
     const infoText = new Text({
       text: `Capacity: ${this.config.capacity}\nFloors: ${this.config.floors}`,
       style: { fontSize: 12, fill: 0xaaaaaa }
     });
     infoText.x = controlsX;
-    infoText.y = controlsY + 90;
+    infoText.y = controlsY + 140;
     this.container.addChild(infoText);
   }
 
@@ -155,7 +183,7 @@ export class ElevatorSystem {
     this.elevator.fill(0xFF5722);
     this.elevator.stroke({ width: 2, color: 0xffffff });
 
-    this.elevatorText.text = `Floor ${parseFloat(this.currentFloor.toFixed(2))}`;
+    this.elevatorText.text = `Floor: ${parseFloat(this.currentFloor.toFixed(2))}\nCapacity: ${this.peopleInElevator.length}/${this.config.capacity}`;
   }
 
   private callElevator(floor: number): void {
@@ -167,6 +195,54 @@ export class ElevatorSystem {
       this.targetFloor = floor;
       this.isMoving = true;
     }
+  }
+
+  private addPeople(count: number): void {
+    for (let i = 0; i < count; i++) {
+      const currentFloor = Math.floor(Math.random() * this.config.floors);
+      let targetFloor = Math.floor(Math.random() * this.config.floors);
+
+      // Ensure the target is different from the current
+      while (targetFloor === currentFloor) {
+        targetFloor = Math.floor(Math.random() * this.config.floors);
+      }
+
+      const person: Person = {
+        currentFloor,
+        targetFloor,
+        sprite: new Graphics(),
+        inElevator: false,
+        direction: (() => {
+          return targetFloor > currentFloor ? 1 : -1;
+        })()
+      };
+
+      this.drawPerson(person);
+      this.people.push(person);
+      this.container.addChild(person.sprite);
+    }
+  }
+
+  private drawPerson(person: Person): void {
+    person.sprite.clear();
+
+    if (person.inElevator) {
+      // Person in elevator
+      const index = this.peopleInElevator.indexOf(person);
+      const y = (this.config.floors - 1 - this.currentFloor) * this.config.floorHeight;
+      person.sprite.circle(15 + (index % 4) * 18, y + 25 + Math.floor(index / 4) * 15, 5);
+      person.sprite.fill(0xFFEB3B);
+    } else {
+      // Person waiting on a floor
+      const y = (this.config.floors - 1 - person.currentFloor) * this.config.floorHeight;
+      const waitingOnFloor = this.people.filter(p => p.currentFloor === person.currentFloor && !p.inElevator);
+      const index = waitingOnFloor.indexOf(person);
+
+      person.sprite.circle(115 + (index % 6) * 12, y + this.config.floorHeight - 10, 5);
+      person.sprite.fill(person.direction === 1 ? 0x4CAF50 : 0xFF9800);
+    }
+
+    person.sprite.stroke({ width: 1, color: 0x000000 });
   }
 
   private update(): void {
@@ -183,12 +259,57 @@ export class ElevatorSystem {
         if (Math.abs(this.currentFloor - this.targetFloor) < step) {
           this.currentFloor = this.targetFloor;
           this.isMoving = false;
+          this.onFloorReached();
         }
 
         this.updateElevatorPosition();
       } else {
         this.isMoving = false;
       }
+
+      // Update people in the elevator
+      this.peopleInElevator.forEach(person => {
+        this.drawPerson(person);
+      });
     }
+
+    this.peopleCountText.text = `People in elevator: ${this.peopleInElevator.length}/${this.config.capacity}`;
+  }
+
+  private onFloorReached(): void {
+    const floor = Math.round(this.currentFloor);
+
+    // Let people out
+    const peopleLeaving = this.peopleInElevator.filter(p => p.targetFloor === floor);
+    peopleLeaving.forEach(person => {
+      const index = this.peopleInElevator.indexOf(person);
+      if (index > -1) {
+        this.peopleInElevator.splice(index, 1);
+      }
+      const personIndex = this.people.indexOf(person);
+      if (personIndex > -1) {
+        this.people.splice(personIndex, 1);
+      }
+      this.container.removeChild(person.sprite);
+    });
+
+    // Let people in
+    const peopleWaiting = this.people.filter(p => p.currentFloor === floor && !p.inElevator);
+    const spotsAvailable = this.config.capacity - this.peopleInElevator.length;
+    const peopleBoarding = peopleWaiting.slice(0, spotsAvailable);
+
+    peopleBoarding.forEach(person => {
+      person.inElevator = true;
+      this.peopleInElevator.push(person);
+      this.drawPerson(person);
+
+      // Auto-set target to their destination
+      if (this.peopleInElevator.length === 1) {
+        this.setTargetFloor(person.targetFloor);
+      }
+    });
+
+    // Redraw waiting people
+    this.people.filter(p => !p.inElevator).forEach(p => this.drawPerson(p));
   }
 }
