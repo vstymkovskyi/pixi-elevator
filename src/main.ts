@@ -34,6 +34,8 @@ async function initializeElevator() {
   // Create or reinitialize the application
   if (!app) {
     app = new Application();
+    // @ts-ignore
+    globalThis.__PIXI_APP__ = app;
     await app.init({ background: "#1a1a1a", width: 800, height: 700 });
     document.getElementById("pixi-container")!.appendChild(app.canvas);
   }
