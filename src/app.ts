@@ -14,9 +14,12 @@ export class ElevatorSystem {
   private isMoving: boolean = false;
   private people: Person[] = [];
   private peopleInElevator: Person[] = [];
-  private floorButtons: Graphics[] = [];
-  private floorTexts: Text[] = [];
-  private peopleCountText: Text;
+  private continuousMode: boolean = false;
+  private peopleUpColor: number = 0x4CAF50;
+  private peopleDownColor: number = 0x4096ee;
+  private elevatorWidth: number = 80;
+  private elevatorHeight: number = 50;
+  private floorHeight: number = 60;
 
   constructor(app: Application, ELEVATOR_CONFIG: Config) {
     this.app = app;
@@ -30,10 +33,6 @@ export class ElevatorSystem {
 
     this.elevator = new Graphics();
     this.elevatorText = new Text({ text: "", style: { fontSize: 12, fill: 0xffffff } });
-    this.peopleCountText = new Text({
-      text: `People in elevator: 0/${ELEVATOR_CONFIG.capacity}`,
-      style: { fontSize: 16, fill: 0xffffff }
-    });
 
     this.init();
   }
@@ -52,13 +51,13 @@ export class ElevatorSystem {
     const building = new Graphics();
 
     for (let i = 0; i < this.config.floors; i++) {
-      building.rect(0, 0, 200, 2);
+      building.rect(0, 40, 200, 2);
       building.fill(0x555555);
 
-      const y = (this.config.floors - 1 - i) * this.config.floorHeight;
+      const y = (this.config.floors - 1 - i) * this.floorHeight;
 
       // Floor line
-      building.rect(0, y + this.config.floorHeight, 200, 2);
+      building.rect(0, y + 40 + this.floorHeight, 200, 2);
       building.fill(0x555555);
 
       // Floor number
@@ -67,30 +66,29 @@ export class ElevatorSystem {
         style: { fontSize: 14, fill: 0xcccccc }
       });
       floorText.x = -100;
-      floorText.y = y + this.config.floorHeight - 40;
+      floorText.y = y + this.floorHeight / 2 + 35;
       this.container.addChild(floorText);
-      this.floorTexts.push(floorText);
 
       // Call button
       const button = new Graphics();
-      button.rect(-40, y + this.config.floorHeight - 40, 30, 20);
+      button.rect(-40, y + this.floorHeight / 2 + 35, 30, 20);
       button.fill(0x4CAF50);
       button.eventMode = 'static';
       button.cursor = 'pointer';
 
+      // Call button text
       const buttonText = new Text({ text: "Call", style: { fontSize: 10, fill: 0xffffff } });
       buttonText.x = -35;
-      buttonText.y = y + this.config.floorHeight - 37;
+      buttonText.y = y + this.floorHeight + 8;
 
       button.on('pointerdown', () => this.callElevator(i));
 
       this.container.addChild(button);
       this.container.addChild(buttonText);
-      this.floorButtons.push(button);
     }
 
     // Elevator shaft
-    building.rect(0, 0, this.config.elevatorWidth + 10, this.config.floors * this.config.floorHeight);
+    building.rect(0, 40, this.elevatorWidth + 10, this.config.floors * this.floorHeight);
     building.stroke({ width: 2, color: 0x333333 });
 
     this.container.addChild(building);
@@ -103,11 +101,6 @@ export class ElevatorSystem {
     this.elevatorText.x = 10;
     this.elevatorText.y = -30;
     this.elevator.addChild(this.elevatorText);
-
-    // People count display
-    this.peopleCountText.x = 220;
-    this.peopleCountText.y = 20;
-    this.container.addChild(this.peopleCountText);
   }
 
   private drawControls(): void {
@@ -165,25 +158,34 @@ export class ElevatorSystem {
     this.container.addChild(addPeopleBtn);
     this.container.addChild(addPeopleText);
 
+    this.addAutoBtns(controlsX, controlsY);
+
     // Info text
     const infoText = new Text({
       text: `Capacity: ${this.config.capacity}\nFloors: ${this.config.floors}`,
       style: { fontSize: 12, fill: 0xaaaaaa }
     });
     infoText.x = controlsX;
-    infoText.y = controlsY + 140;
+    infoText.y = controlsY + 180;
     this.container.addChild(infoText);
   }
 
   private updateElevatorPosition(): void {
-    const y = (this.config.floors - 1 - this.currentFloor) * this.config.floorHeight;
+    const y = (this.config.floors - 1 - this.currentFloor) * this.floorHeight;
 
     this.elevator.clear();
-    this.elevator.rect(5, y + 5, this.config.elevatorWidth, this.config.elevatorHeight);
+    this.elevator.rect(5, y + 45, this.elevatorWidth, this.elevatorHeight);
     this.elevator.fill(0xFF5722);
     this.elevator.stroke({ width: 2, color: 0xffffff });
 
-    this.elevatorText.text = `Floor: ${parseFloat(this.currentFloor.toFixed(2))}\nCapacity: ${this.peopleInElevator.length}/${this.config.capacity}`;
+    let movingStatus = 'Stopped';
+    if (this.isMoving) {
+      movingStatus = this.targetFloor > this.currentFloor ? 'Up' : 'Down';
+    }
+
+    this.elevatorText.text = `Floor: ${parseFloat(this.currentFloor.toFixed(2))}`;
+    this.elevatorText.text += `\nMoving direction: ${movingStatus}`;
+    this.elevatorText.text += `\nCapacity: ${this.peopleInElevator.length}/${this.config.capacity}`;
   }
 
   private callElevator(floor: number): void {
@@ -229,17 +231,17 @@ export class ElevatorSystem {
     if (person.inElevator) {
       // Person in elevator
       const index = this.peopleInElevator.indexOf(person);
-      const y = (this.config.floors - 1 - this.currentFloor) * this.config.floorHeight;
-      person.sprite.circle(15 + (index % 4) * 18, y + 25 + Math.floor(index / 4) * 15, 5);
-      person.sprite.fill(0xFFEB3B);
+      const y = (this.config.floors - 1 - this.currentFloor) * this.floorHeight;
+      person.sprite.circle(15 + (index % 4) * 18, y + 55 + Math.floor(index / 4) * 15, 5);
+      person.sprite.fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
     } else {
       // Person waiting on a floor
-      const y = (this.config.floors - 1 - person.currentFloor) * this.config.floorHeight;
+      const y = (this.config.floors - 1 - person.currentFloor) * this.floorHeight;
       const waitingOnFloor = this.people.filter(p => p.currentFloor === person.currentFloor && !p.inElevator);
       const index = waitingOnFloor.indexOf(person);
 
-      person.sprite.circle(100 + (index % 5) * 18, y + this.config.floorHeight - 10, 5);
-      person.sprite.fill(person.direction === 1 ? 0x4CAF50 : 0xFF9800);
+      person.sprite.circle(100 + (index % 5) * 18, y + this.floorHeight - 10, 5);
+      person.sprite.fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
     }
 
     person.sprite.stroke({ width: 1, color: 0x000000 });
@@ -252,7 +254,7 @@ export class ElevatorSystem {
 
       if (distance > 0) {
         // Move towards a target floor
-        const step = this.config.animationSpeed / this.config.floorHeight;
+        const step = this.config.elevatorSpeed / this.floorHeight;
         this.currentFloor += direction * step;
 
         // Snap to the floor when close enough
@@ -272,8 +274,6 @@ export class ElevatorSystem {
         this.drawPerson(person);
       });
     }
-
-    this.peopleCountText.text = `People in elevator: ${this.peopleInElevator.length}/${this.config.capacity}`;
   }
 
   private onFloorReached(): void {
@@ -311,5 +311,86 @@ export class ElevatorSystem {
 
     // Redraw waiting people
     this.people.filter(p => !p.inElevator).forEach(p => this.drawPerson(p));
+
+    // If in continuous mode, find the next destination
+    if (this.continuousMode) {
+      setTimeout(() => this.findNextDestination(), 500); // Small delay before moving to the next floor
+    }
+  }
+
+  private findNextDestination(): void {
+    if (!this.continuousMode) return;
+
+    // Case 1: Drop off people in the elevator
+    if (this.peopleInElevator.length > 0) {
+      // Find the closest target floor for people in the elevator
+      const targets = this.peopleInElevator.map(p => p.targetFloor);
+      const closest = this.findClosestFloor(targets);
+      if (closest !== null && closest !== Math.round(this.currentFloor)) {
+        this.setTargetFloor(closest);
+        return;
+      }
+    }
+
+    // Case 2: Pick up waiting people
+    const waitingFloors = [...new Set(this.people.filter(p => !p.inElevator).map(p => p.currentFloor))];
+    if (waitingFloors.length > 0) {
+      const closest = this.findClosestFloor(waitingFloors);
+      if (closest !== null && closest !== Math.round(this.currentFloor)) {
+        this.setTargetFloor(closest);
+        return;
+      }
+    }
+
+    // No one to pick up or drop off - waiting for manual call
+  }
+
+  private findClosestFloor(floors: number[]): number | null {
+    if (floors.length === 0) return null;
+
+    const current = Math.round(this.currentFloor);
+    let closest = floors[0];
+    let minDistance = Math.abs(floors[0] - current);
+
+    for (const floor of floors) {
+      const distance = Math.abs(floor - current);
+      if (distance < minDistance && distance > 0) {
+        minDistance = distance;
+        closest = floor;
+      }
+    }
+
+    return closest;
+  }
+
+  private addAutoBtns(controlsX: number, controlsY: number): void {
+    // Continuous mode toggle button
+    const continuousBtn = new Graphics();
+    continuousBtn.rect(controlsX, controlsY + 130, 160, 30);
+    continuousBtn.fill(0x9C27B0);
+    continuousBtn.eventMode = 'static';
+    continuousBtn.cursor = 'pointer';
+
+    const continuousText = new Text({
+      text: "Auto Elevator Mode: OFF",
+      style: { fontSize: 12, fill: 0xffffff }
+    });
+    continuousText.x = controlsX + 10;
+    continuousText.y = controlsY + 138;
+
+    continuousBtn.on('pointerdown', () => {
+      this.continuousMode = !this.continuousMode;
+      continuousText.text = this.continuousMode ? "Auto Elevator Mode: ON" : "Auto Elevator Mode: OFF";
+      continuousBtn.clear();
+      continuousBtn.rect(controlsX, controlsY + 130, 160, 30);
+      continuousBtn.fill(this.continuousMode ? 0x4CAF50 : 0x9C27B0);
+
+      if (this.continuousMode) {
+        this.findNextDestination();
+      }
+    });
+
+    this.container.addChild(continuousBtn);
+    this.container.addChild(continuousText);
   }
 }
