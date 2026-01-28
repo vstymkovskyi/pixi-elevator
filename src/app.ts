@@ -14,12 +14,15 @@ export class ElevatorSystem {
   private isMoving: boolean = false;
   private people: Person[] = [];
   private peopleInElevator: Person[] = [];
-  private continuousMode: boolean = false;
+  private continuousElevatorMode: boolean = false;
+  private continuousAddPeople: boolean = false;
   private peopleUpColor: number = 0x4CAF50;
   private peopleDownColor: number = 0x4096ee;
   private elevatorWidth: number = 80;
   private elevatorHeight: number = 50;
   private floorHeight: number = 60;
+  private nextAddPeopleTime: number = 0;
+  private addPeopleInterval: number = 0;
 
   constructor(app: Application, ELEVATOR_CONFIG: Config) {
     this.app = app;
@@ -166,7 +169,7 @@ export class ElevatorSystem {
       style: { fontSize: 12, fill: 0xaaaaaa }
     });
     infoText.x = controlsX;
-    infoText.y = controlsY + 180;
+    infoText.y = controlsY + 220;
     this.container.addChild(infoText);
   }
 
@@ -269,6 +272,18 @@ export class ElevatorSystem {
   }
 
   private update(): void {
+    // Handle continuous people addition
+    if (this.continuousAddPeople) {
+      const currentTime = Date.now();
+      if (currentTime >= this.nextAddPeopleTime) {
+        this.addPeople(1);
+
+        // Schedule the next addition between 4-10 seconds
+        this.addPeopleInterval = (Math.random() * 6 + 4) * 1000; // 4000-10000 ms
+        this.nextAddPeopleTime = currentTime + this.addPeopleInterval;
+      }
+    }
+
     if (this.isMoving) {
       const direction = this.targetFloor > this.currentFloor ? 1 : -1;
       const distance = Math.abs(this.targetFloor - this.currentFloor);
@@ -294,6 +309,9 @@ export class ElevatorSystem {
       this.peopleInElevator.forEach(person => {
         this.drawPerson(person);
       });
+    } else if (this.continuousElevatorMode && this.people.length > 0) {
+      // If in continuous mode, find the next destination
+      setTimeout(() => this.findNextDestination(), 500); // Small delay before moving to the next floor
     }
   }
 
@@ -331,7 +349,7 @@ export class ElevatorSystem {
     });
 
     // uncomment if all people in the elevator should be delivered
-    // if (!this.continuousMode && !peopleBoarding.length && this.peopleInElevator.length > 0) {
+    // if (!this.continuousElevatorMode && !peopleBoarding.length && this.peopleInElevator.length > 0) {
     //   this.setTargetFloor(this.peopleInElevator[0].targetFloor);
     // }
 
@@ -339,13 +357,13 @@ export class ElevatorSystem {
     this.people.filter(p => !p.inElevator).forEach(p => this.drawPerson(p));
 
     // If in continuous mode, find the next destination
-    if (this.continuousMode) {
+    if (this.continuousElevatorMode) {
       setTimeout(() => this.findNextDestination(), 500); // Small delay before moving to the next floor
     }
   }
 
   private findNextDestination(): void {
-    if (!this.continuousMode) return;
+    if (!this.continuousElevatorMode) return;
 
     // Case 1: Drop off people in the elevator
     if (this.peopleInElevator.length > 0) {
@@ -391,32 +409,68 @@ export class ElevatorSystem {
 
   private addAutoBtns(controlsX: number, controlsY: number): void {
     // Continuous mode toggle button
-    const continuousBtn = new Graphics();
-    continuousBtn.rect(controlsX, controlsY + 130, 160, 30);
-    continuousBtn.fill(0x9C27B0);
-    continuousBtn.eventMode = 'static';
-    continuousBtn.cursor = 'pointer';
+    const continuousElevatorBtn = new Graphics();
+    continuousElevatorBtn.rect(controlsX, controlsY + 130, 160, 30);
+    continuousElevatorBtn.fill(0x9C27B0);
+    continuousElevatorBtn.eventMode = 'static';
+    continuousElevatorBtn.cursor = 'pointer';
 
-    const continuousText = new Text({
+    const continuousElevatorText = new Text({
       text: "Auto Elevator Mode: OFF",
       style: { fontSize: 12, fill: 0xffffff }
     });
-    continuousText.x = controlsX + 10;
-    continuousText.y = controlsY + 138;
+    continuousElevatorText.x = controlsX + 10;
+    continuousElevatorText.y = controlsY + 138;
 
-    continuousBtn.on('pointerdown', () => {
-      this.continuousMode = !this.continuousMode;
-      continuousText.text = this.continuousMode ? "Auto Elevator Mode: ON" : "Auto Elevator Mode: OFF";
-      continuousBtn.clear();
-      continuousBtn.rect(controlsX, controlsY + 130, 160, 30);
-      continuousBtn.fill(this.continuousMode ? 0x4CAF50 : 0x9C27B0);
+    continuousElevatorBtn.on('pointerdown', () => {
+      this.continuousElevatorMode = !this.continuousElevatorMode;
+      continuousElevatorText.text = this.continuousElevatorMode ? "Auto Elevator Mode: ON" : "Auto Elevator Mode: OFF";
+      continuousElevatorBtn.clear();
+      continuousElevatorBtn.rect(controlsX, controlsY + 130, 160, 30);
+      continuousElevatorBtn.fill(this.continuousElevatorMode ? 0x4CAF50 : 0x9C27B0);
 
-      if (this.continuousMode) {
+      if (this.continuousElevatorMode) {
         this.findNextDestination();
       }
     });
 
-    this.container.addChild(continuousBtn);
-    this.container.addChild(continuousText);
+    this.container.addChild(continuousElevatorBtn);
+    this.container.addChild(continuousElevatorText);
+
+    // Continuous add people button
+    const continuousPeopleBtn = new Graphics();
+    continuousPeopleBtn.rect(controlsX, controlsY + 170, 160, 30);
+    continuousPeopleBtn.fill(0x9C27B0);
+    continuousPeopleBtn.eventMode = 'static';
+    continuousPeopleBtn.cursor = 'pointer';
+
+    const continuousPeopleText = new Text({
+      text: "Auto Add People: OFF",
+      style: { fontSize: 12, fill: 0xffffff }
+    });
+    continuousPeopleText.x = controlsX + 10;
+    continuousPeopleText.y = controlsY + 178;
+
+    continuousPeopleBtn.on('pointerdown', () => {
+      this.continuousAddPeople = !this.continuousAddPeople;
+      continuousPeopleText.text = this.continuousAddPeople ? "Auto Add People: ON" : "Auto Add People: OFF";
+      continuousPeopleBtn.clear();
+      continuousPeopleBtn.rect(controlsX, controlsY + 170, 160, 30);
+      continuousPeopleBtn.fill(this.continuousAddPeople ? 0x4CAF50 : 0x9C27B0);
+
+      if (this.continuousAddPeople) {
+        // Initialize timer - add people immediately and schedule next
+        this.addPeople(1);
+        this.addPeopleInterval = (Math.random() * 6 + 4) * 1000; // 4-10 seconds
+        this.nextAddPeopleTime = Date.now() + this.addPeopleInterval;
+      } else {
+        // Reset timer when turned off
+        this.nextAddPeopleTime = 0;
+        this.addPeopleInterval = 0;
+      }
+    });
+
+    this.container.addChild(continuousPeopleBtn);
+    this.container.addChild(continuousPeopleText);
   }
 }
