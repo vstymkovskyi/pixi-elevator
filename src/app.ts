@@ -227,24 +227,45 @@ export class ElevatorSystem {
 
   private drawPerson(person: Person): void {
     person.sprite.clear();
+    // Remove all children (including old text) before redrawing
+    person.sprite.removeChildren();
+
+    // Add target floor text inside the icon
+    const floorText = new Text({
+      text: `${person.targetFloor}`,
+      style: { fontSize: 10, fill: 0xffffff, fontWeight: 'bold' }
+    });
+    let xPos;
+    let yPos;
 
     if (person.inElevator) {
       // Person in elevator
       const index = this.peopleInElevator.indexOf(person);
       const y = (this.config.floors - 1 - this.currentFloor) * this.floorHeight;
-      person.sprite.circle(15 + (index % 4) * 18, y + 55 + Math.floor(index / 4) * 15, 5);
-      person.sprite.fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
+      xPos = 15 + (index % 4) * 18;
+      yPos = y + this.floorHeight - 10 + Math.floor(index / 4) * 20;
+      person.sprite
+          .roundRect(xPos, yPos, 15, 20, 2)
+          .fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
+
     } else {
       // Person waiting on a floor
       const y = (this.config.floors - 1 - person.currentFloor) * this.floorHeight;
       const waitingOnFloor = this.people.filter(p => p.currentFloor === person.currentFloor && !p.inElevator);
       const index = waitingOnFloor.indexOf(person);
 
-      person.sprite.circle(100 + (index % 5) * 18, y + this.floorHeight - 10, 5);
-      person.sprite.fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
+      xPos = 95 + (index % 5) * 18;
+      yPos = y + this.floorHeight - 15;
+
+      // Draw rectangle
+      person.sprite
+          .roundRect(xPos, yPos, 15, 20, 2)
+          .fill(person.direction === 1 ? this.peopleUpColor : this.peopleDownColor);
     }
 
-    person.sprite.stroke({ width: 1, color: 0x000000 });
+    floorText.x = xPos + 4;
+    floorText.y = yPos + 4;
+    person.sprite.addChild(floorText);
   }
 
   private update(): void {
@@ -308,6 +329,11 @@ export class ElevatorSystem {
         this.setTargetFloor(person.targetFloor);
       }
     });
+
+    // uncomment if all people in the elevator should be delivered
+    // if (!this.continuousMode && !peopleBoarding.length && this.peopleInElevator.length > 0) {
+    //   this.setTargetFloor(this.peopleInElevator[0].targetFloor);
+    // }
 
     // Redraw waiting people
     this.people.filter(p => !p.inElevator).forEach(p => this.drawPerson(p));
