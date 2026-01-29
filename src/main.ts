@@ -5,7 +5,7 @@ import { ElevatorSystem } from "./app";
 let ELEVATOR_CONFIG = {
   floors: 10, // Number of floors (can be changed)
   capacity: 4, // Maximum people capacity (can be changed)
-  elevatorSpeed: 1
+  elevatorSpeed: 800
 };
 
 let app: Application;
