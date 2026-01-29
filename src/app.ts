@@ -72,7 +72,7 @@ export class ElevatorSystem {
     private init(): void {
         this.drawBuilding();
 
-        // Add elevator container to the main view
+        // Add an elevator container to the main view
         this.mainContainer.addChild(this.elevator.container);
         this.mainContainer.addChild(this.elevator.infoText);
 
@@ -81,7 +81,12 @@ export class ElevatorSystem {
         // Init state
         this.elevator.moveTo(1, true);
 
-        setTimeout(() => this.addPeople(6), 100);
+        setTimeout(async () => {
+          await this.addPeople(8);
+          if (this.continuousElevatorMode && !this.elevator.isMoving && this.people.length) {
+            setTimeout(async () => await this.findNextDestination(), 900);
+          }
+        }, 100);
         this.app.ticker.add(() => this.update());
     }
 
@@ -200,28 +205,30 @@ export class ElevatorSystem {
     }
 
     private async setTargetFloor(floor: number): Promise<void> {
-        if (floor >= 1 && floor <= this.config.floors && floor !== this.elevator.currentFloor) {
-            this.targetFloor = floor;
-            await this.elevator.moveTo(floor);
-            await this.onFloorReached();
-        }
+      if (floor < 1 || floor > this.config.floors) return;
+
+      if (floor >= 1 && floor <= this.config.floors && floor !== this.elevator.currentFloor) {
+          this.targetFloor = floor;
+          await this.elevator.moveTo(floor);
+          await this.onFloorReached();
+      }
     }
 
-    private addPeople(count: number): void {
-        for (let i = 0; i < count; i++) {
-            const currentFloor = random(1, this.config.floors);
-            let targetFloor = random(1, this.config.floors);
-            while (targetFloor === currentFloor) targetFloor = random(1, this.config.floors);
+    private async addPeople(count: number): Promise<void> {
+      for (let i = 0; i < count; i++) {
+        const currentFloor = random(1, this.config.floors);
+        let targetFloor = random(1, this.config.floors);
+        while (targetFloor === currentFloor) targetFloor = random(1, this.config.floors);
 
-            const person = new Person(currentFloor, targetFloor);
-            this.people.push(person);
-            this.personsContainer.addChild(person.view);
+        const person = new Person(currentFloor, targetFloor);
+        this.people.push(person);
+        this.personsContainer.addChild(person.view);
 
-            this.renderPersonOnFloor(person);
-        }
+        await this.renderPersonOnFloor(person);
+      }
     }
 
-    private renderPersonOnFloor(person: Person): void {
+    private async renderPersonOnFloor(person: Person): Promise<void> {
         const waitingOnFloor = this.people.filter(p => p.currentFloor === person.currentFloor && !p.inElevator);
         const index = waitingOnFloor.indexOf(person);
 
@@ -231,160 +238,170 @@ export class ElevatorSystem {
         person.view.x = 400;
 
         // Move to the queue position
-        this.moveElement(person.view, {x: (index % 5) * 18}, 800);
+        await this.moveElement(person.view, {x: (index % 5) * 18}, 800);
     }
 
-    private update(): void {
-        // Continuous Logic
-        if (this.continuousAddPeople && Date.now() >= this.nextAddPeopleTime) {
-            this.addPeople(1);
-            this.nextAddPeopleTime = Date.now() + (Math.random() * 6 + 4) * 1000;
-        }
+    private async update(): Promise<void> {
+      // Continuous Logic
+      if (this.continuousAddPeople && Date.now() >= this.nextAddPeopleTime) {
+          this.addPeople(1);
+          this.nextAddPeopleTime = Date.now() + (Math.random() * 6 + 4) * 1000;
+      }
 
-        // Update elevator status text for people count
-        if (this.elevator.isMoving) {
-            this.elevator.updateStatus(this.targetFloor, this.peopleInElevator.length);
-        }
+      // Update elevator status text for people count
+      if (this.elevator.isMoving) {
+          this.elevator.updateStatus(this.targetFloor, this.peopleInElevator.length);
+      }
+
+      // // if no people left waiting and check with delay
+      if (this.continuousElevatorMode &&
+          this.continuousAddPeople &&
+          !this.elevator.isMoving && this.people.length &&
+          this.peopleInElevator.length === 0
+      ) {
+        setTimeout(async () => await this.findNextDestination(), 900); // Small delay before moving to the next floor
+      }
     }
 
     private async onFloorReached(): Promise<void> {
-        const floor = Math.round(this.elevator.currentFloor);
+      const floor = Math.round(this.elevator.currentFloor);
 
-        // People leaving
-        const peopleLeaving = this.peopleInElevator.filter(p => p.targetFloor === floor);
+      // People leaving
+      const peopleLeaving = this.peopleInElevator.filter(p => p.targetFloor === floor);
 
-        await Promise.all(peopleLeaving.map(async (person) => {
-            // Animate out
-            await this.moveElement(person.view, {x: 600});
+      await Promise.all(peopleLeaving.map(async (person) => {
+          // Animate out
+          await this.moveElement(person.view, {x: 600});
 
-            // Remove from logic
-            this.peopleInElevator = this.peopleInElevator.filter(p => p !== person);
-            this.people = this.people.filter(p => p !== person);
-            this.elevator.removePerson(person);
-        }));
+          // Remove from logic
+          this.peopleInElevator = this.peopleInElevator.filter(p => p !== person);
+          this.people = this.people.filter(p => p !== person);
+          this.elevator.removePerson(person);
+      }));
 
-        this.elevator.updateStatus(floor, this.peopleInElevator.length);
+      this.elevator.updateStatus(floor, this.peopleInElevator.length);
 
-        // Determine Direction
-        let direction = 0;
-        const targetsAbove = this.peopleInElevator.some(p => p.targetFloor > floor);
-        const targetsBelow = this.peopleInElevator.some(p => p.targetFloor < floor);
+      // Determine Direction
+      let direction = 0;
+      const targetsAbove = this.peopleInElevator.some(p => p.targetFloor > floor);
+      const targetsBelow = this.peopleInElevator.some(p => p.targetFloor < floor);
 
-        if (targetsAbove) direction = 1;
-        else if (targetsBelow) direction = -1;
-        else {
-            // Logic for picking up new people based on a majority
-            const waiting = this.people.filter(p => p.currentFloor === floor && !p.inElevator);
-            if (waiting.length > 0) {
-                const goingUp = waiting.filter(p => p.direction === 1).length;
-                direction = goingUp >= waiting.length / 2 ? 1 : -1;
-            }
-        }
+      if (targetsAbove) direction = 1;
+      else if (targetsBelow) direction = -1;
+      else {
+          // Logic for picking up new people based on a majority
+          const waiting = this.people.filter(p => p.currentFloor === floor && !p.inElevator);
+          if (waiting.length > 0) {
+              const goingUp = waiting.filter(p => p.direction === 1).length;
+              direction = goingUp >= waiting.length / 2 ? 1 : -1;
+          }
+      }
 
-        // People Boarding
-        const peopleBoarding = this.people.filter(p =>
-            p.currentFloor === floor &&
-            !p.inElevator &&
-            (direction === 0 || p.direction === direction)
-        );
+      // People Boarding
+      const peopleBoarding = this.people.filter(p =>
+          p.currentFloor === floor &&
+          !p.inElevator &&
+          (direction === 0 || p.direction === direction)
+      );
 
-        // Fill until capacity
-        const spots = this.config.capacity - this.peopleInElevator.length;
-        const toBoard = peopleBoarding.slice(0, spots);
+      // Fill until capacity
+      const spots = this.config.capacity - this.peopleInElevator.length;
+      const toBoard = peopleBoarding.slice(0, spots);
 
-        for (const person of toBoard) {
-            // Simple animation to "walk" into elevator x-space
-            await this.moveElement(person.view, {x: person.view.x - 50}, 300);
+      for (const person of toBoard) {
+          // Simple animation to "walk" into elevator x-space
+          await this.moveElement(person.view, {x: person.view.x - 50}, 300);
 
-            person.inElevator = true;
-            this.personsContainer.removeChild(person.view);
-            this.elevator.addPerson(person); // Adds to elevator container
-            this.peopleInElevator.push(person);
+          person.inElevator = true;
+          this.personsContainer.removeChild(person.view);
+          this.elevator.addPerson(person); // Adds to elevator container
+          this.peopleInElevator.push(person);
 
-            // Position inside the elevator box
-            const idx = this.peopleInElevator.length - 1;
-            person.redraw(this.config.floors, this.floorHeight, idx);
+          // Position inside the elevator box
+          const idx = this.peopleInElevator.length - 1;
+          person.redraw(this.config.floors, this.floorHeight, idx);
 
-            // Manual positioning relative to elevator container
-            person.view.x = 15 + (idx % 4) * 18;
-            person.view.y = 15 + Math.floor(idx / 4) * 20;
-        }
+          // Manual positioning relative to elevator container
+          person.view.x = 15 + (idx % 4) * 18;
+          person.view.y = 15 + Math.floor(idx / 4) * 20;
+      }
 
-        this.elevator.updateStatus(floor, this.peopleInElevator.length);
+      this.elevator.updateStatus(floor, this.peopleInElevator.length);
 
-        // Continue Auto Mode
-        if (this.continuousElevatorMode) {
-            setTimeout(() => this.findNextDestination(), 500);
-        }
+      // Continue Auto Mode
+      if (this.continuousElevatorMode) {
+          setTimeout(() => this.findNextDestination(), 500);
+      }
     }
 
     private async findNextDestination(): Promise<void> {
-        if (!this.continuousElevatorMode) return;
+      if (!this.continuousElevatorMode || this.elevator.isMoving) return;
 
-        // Logic remains same: prioritize drop-off, then pick-up
-        const current = Math.round(this.elevator.currentFloor);
-        let target = null;
-        let minDist = Infinity;
+      // Logic remains same: prioritize drop-off, then pick-up
+      const current = Math.round(this.elevator.currentFloor);
+      let target = null;
+      let minDist = Infinity;
 
-        // Check inside
-        if (this.peopleInElevator.length > 0) {
-            for (const p of this.peopleInElevator) {
-                const dist = Math.abs(p.targetFloor - current);
-                if (dist < minDist && dist > 0) {
-                    minDist = dist;
-                    target = p.targetFloor;
-                }
-            }
+      // Check inside
+      if (this.peopleInElevator.length > 0) {
+        for (const p of this.peopleInElevator) {
+          const dist = Math.abs(p.targetFloor - current);
+          if (dist < minDist && dist > 0) {
+            minDist = dist;
+            target = p.targetFloor;
+          }
         }
-        // Check outside if empty or convenient
-        else {
-            const waitingFloors = [...new Set(this.people.filter(p => !p.inElevator).map(p => p.currentFloor))];
-            for (const f of waitingFloors) {
-                const dist = Math.abs(f - current);
-                if (dist < minDist && dist > 0) {
-                    minDist = dist;
-                    target = f;
-                }
-            }
+      }
+      // Check outside if empty or convenient
+      else {
+        const waitingFloors = [...new Set(this.people.filter(p => !p.inElevator).map(p => p.currentFloor))];
+        for (const f of waitingFloors) {
+          const dist = Math.abs(f - current);
+          if (dist < minDist && dist > 0) {
+            minDist = dist;
+            target = f;
+          }
         }
+      }
 
-        if (target !== null) {
-            await this.setTargetFloor(target);
-        }
+      if (target !== null) {
+          await this.setTargetFloor(target);
+      }
     }
 
     private addAutoBtns(parent: Container, x: number, y: number): void {
-        // Helper to reduce clutter
-        const createBtn = (offsetY: number, text: string, stateCallback: () => boolean) => {
-            const btn = new Graphics();
-            btn.rect(x, y + offsetY, 160, 30).fill(0x9C27B0);
-            btn.eventMode = "static";
-            btn.cursor = "pointer";
+      // Helper to reduce clutter
+      const createBtn = (offsetY: number, text: string, defaultState: boolean, stateCallback: () => boolean) => {
+        const btn = new Graphics();
+        let isActive = defaultState;
+        btn.rect(x, y + offsetY, 160, 30).fill(isActive ? 0x4CAF50 : 0x9C27B0);
+        btn.eventMode = "static";
 
-            const txt = new Text({text: text + ": OFF", style: {fontSize: 12, fill: 0xffffff}});
-            txt.position.set(x + 10, y + offsetY + 8);
+        btn.cursor = "pointer";
+        const txt = new Text({text: text + (isActive ? ": ON" : ": OFF"), style: {fontSize: 12, fill: 0xffffff}});
+        txt.position.set(x + 10, y + offsetY + 8);
 
-            btn.on("pointerdown", () => {
-                const isActive = stateCallback();
-                btn.clear().rect(x, y + offsetY, 160, 30).fill(isActive ? 0x4CAF50 : 0x9C27B0);
-                txt.text = text + (isActive ? ": ON" : ": OFF");
-            });
-            parent.addChild(btn, txt);
-        };
-
-        createBtn(130, "Auto Elevator", () => {
-            this.continuousElevatorMode = !this.continuousElevatorMode;
-            if (this.continuousElevatorMode) this.findNextDestination();
-            return this.continuousElevatorMode;
-    });
-
-        createBtn(170, "Auto Add People", () => {
-            this.continuousAddPeople = !this.continuousAddPeople;
-            if (this.continuousAddPeople) {
-                this.addPeople(1);
-                this.nextAddPeopleTime = Date.now() + 4000;
-            }
-            return this.continuousAddPeople;
+        btn.on("pointerdown", () => {
+            isActive = stateCallback();
+            btn.clear().rect(x, y + offsetY, 160, 30).fill(isActive ? 0x4CAF50 : 0x9C27B0);
+            txt.text = text + (isActive ? ": ON" : ": OFF");
         });
-    }
+        parent.addChild(btn, txt);
+      };
+
+    createBtn(130, "Auto Elevator", this.continuousElevatorMode, () => {
+        this.continuousElevatorMode = !this.continuousElevatorMode;
+        if (this.continuousElevatorMode) this.findNextDestination();
+        return this.continuousElevatorMode;
+  });
+
+    createBtn(170, "Auto Add People", this.continuousAddPeople, () => {
+        this.continuousAddPeople = !this.continuousAddPeople;
+        if (this.continuousAddPeople) {
+            this.addPeople(1);
+            this.nextAddPeopleTime = Date.now() + 4000;
+        }
+        return this.continuousAddPeople;
+    });
+  }
 }
