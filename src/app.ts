@@ -337,35 +337,79 @@ export class ElevatorSystem {
     private async findNextDestination(): Promise<void> {
       if (!this.continuousElevatorMode || this.elevator.isMoving) return;
 
-      // Logic remains same: prioritize drop-off, then pick-up
+      // // Logic remains same: prioritize drop-off, then pick-up
+      // const current = Math.round(this.elevator.currentFloor);
+      // let target = null;
+      // let minDist = Infinity;
+      //
+      // // Check inside
+      // if (this.peopleInElevator.length > 0) {
+      //   for (const p of this.peopleInElevator) {
+      //     const dist = Math.abs(p.targetFloor - current);
+      //     if (dist < minDist && dist > 0) {
+      //       minDist = dist;
+      //       target = p.targetFloor;
+      //     }
+      //   }
+      // }
+      // // Check outside if empty or convenient
+      // else {
+      //   const waitingFloors = [...new Set(this.people.filter(p => !p.inElevator).map(p => p.currentFloor))];
+      //   for (const f of waitingFloors) {
+      //     const dist = Math.abs(f - current);
+      //     if (dist < minDist && dist > 0) {
+      //       minDist = dist;
+      //       target = f;
+      //     }
+      //   }
+      // }
+      //
+      // if (target !== null) {
+      //     await this.setTargetFloor(target);
+      // }
+
       const current = Math.round(this.elevator.currentFloor);
-      let target = null;
-      let minDist = Infinity;
+      let target: number | null = null;
 
-      // Check inside
+      // Determine current direction based on people in elevator
+      let direction = 0; // 0 = no preference, 1 = up, -1 = down
+
       if (this.peopleInElevator.length > 0) {
-        for (const p of this.peopleInElevator) {
-          const dist = Math.abs(p.targetFloor - current);
-          if (dist < minDist && dist > 0) {
-            minDist = dist;
-            target = p.targetFloor;
-          }
-        }
+        const floorsAbove = this.peopleInElevator.filter(p => p.targetFloor > current);
+        const floorsBelow = this.peopleInElevator.filter(p => p.targetFloor < current);
+
+        if (floorsAbove.length > 0) direction = 1;
+        else if (floorsBelow.length > 0) direction = -1;
       }
-      // Check outside if empty or convenient
-      else {
-        const waitingFloors = [...new Set(this.people.filter(p => !p.inElevator).map(p => p.currentFloor))];
-        for (const f of waitingFloors) {
-          const dist = Math.abs(f - current);
-          if (dist < minDist && dist > 0) {
-            minDist = dist;
-            target = f;
-          }
+
+      // Find the next target in the current direction
+      if (direction !== 0) {
+        // Prioritize drop-offs in the current direction
+        const targetsInDirection = this.peopleInElevator
+          .filter(p => direction === 1 ? p.targetFloor > current : p.targetFloor < current)
+          .map(p => p.targetFloor)
+          .sort((a, b) => direction === 1 ? a - b : b - a);
+
+        if (targetsInDirection.length > 0) {
+          target = targetsInDirection[0]; // Closest in direction
+        }
+      } else {
+        // No direction: check for waiting people
+        const waitingPeople = this.people.filter(p => !p.inElevator);
+
+        if (waitingPeople.length > 0) {
+          // Find the closest waiting floor
+          const waitingFloors = [...new Set(waitingPeople.map(p => p.currentFloor))];
+          target = waitingFloors.reduce((closest, floor) => {
+            const dist = Math.abs(floor - current);
+            const closestDist = Math.abs(closest - current);
+            return dist < closestDist ? floor : closest;
+          });
         }
       }
 
-      if (target !== null) {
-          await this.setTargetFloor(target);
+      if (target !== null && target !== current) {
+        await this.setTargetFloor(target);
       }
     }
 
